@@ -1,28 +1,28 @@
 import express from "express";
+import path from "path";
 
 const app = express();
 app.use(express.json());
 
 const PORT = process.env.PORT || 8080;
 
-/**
- * Example AI endpoint (placeholder for agent logic)
- */
+// Serve frontend build
+app.use(express.static(path.join(process.cwd(), "frontend")));
+
+// API routes
 app.post("/api/agent", async (req, res) => {
   const { message } = req.body;
 
-  // TODO: replace with real AI agent logic
-  const response = {
+  res.json({
     reply: `Agent received: ${message}`,
-  };
-
-  res.json(response);
+  });
 });
 
-app.get("/api/health", (req, res) => {
-  res.json({ status: "ok" });
+// fallback for SPA routing
+app.get("*", (req, res) => {
+  res.sendFile(path.join(process.cwd(), "frontend", "index.html"));
 });
 
 app.listen(PORT, () => {
-  console.log(`Backend running on port ${PORT}`);
+  console.log(`Running on port ${PORT}`);
 });
