@@ -22,11 +22,11 @@ import {
   Layers,
   BarChart3
 } from 'lucide-react';
-import { MetricHierarchy, AuditLogEntry, AppView, RAGStatus } from './types';
-import { useMetrics } from './hooks/useMetrics';
-import { MetricCard } from './components/MetricCard';
-import { getAiPrediction, calculateStatus } from './services/metricService';
-import { cn } from './lib/utils';
+import { MetricHierarchy, AuditLogEntry, AppView, RAGStatus } from './types.ts';
+import { useMetrics } from './hooks/useMetrics.ts';
+import { MetricCard } from './components/MetricCard.tsx';
+import { getAiPrediction, calculateStatus } from './services/metricService.ts';
+import { cn } from './lib/utils.ts';
 
 export default function App() {
   const { hierarchy, setHierarchy, loading, refreshData } = useMetrics();

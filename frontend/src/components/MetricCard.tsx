@@ -1,6 +1,6 @@
 import { motion } from 'motion/react';
-import { RAGStatus } from '../types';
-import { cn } from '../lib/utils';
+import { RAGStatus } from '../types.ts';
+import { cn } from '../lib/utils.ts';
 import { ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react';
 
 interface MetricCardProps {
