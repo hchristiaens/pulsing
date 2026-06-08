@@ -353,10 +353,10 @@ export default function App() {
   };
 
   const [organizations, setOrganizations] = useState<Organization[]>([
-    { id: 'eca-be', title: 'EC&A BE', icon: 'Activity', description: 'Belgium Operations & Regional Cockpit', isActive: true, type: 'Area', teamCode: 'T00001', owner: 'Hans Christiaens' },
-    { id: 'eca-fr', title: 'EC&A FR', icon: 'Globe', description: 'France Strategic Business Unit', isActive: true, type: 'Area', teamCode: 'T00002', owner: 'Jean Dupont' },
-    { id: 'eca-uk', title: 'EC&A UK', icon: 'Shield', description: 'UK Logistics & Compliance', isActive: true, type: 'Area', teamCode: 'T00003', owner: 'Sarah Smith' },
-    { id: 'eca-global', title: 'EC&A GLOBAL', icon: 'Layers', description: 'Global Consolidation Dashboard', isActive: true, type: 'Community', teamCode: 'T99999', owner: 'Global Team' }
+    { id: 'eca-be', title: 'EC&A BE', icon: 'Activity', description: 'Enterprise Content & Automation Belgium', isActive: true, type: 'IT Area', teamCode: 'T00001', owner: 'Mireille Van Damme' },
+    { id: 'cdbe', title: 'C&D BE', icon: 'Globe', description: 'Customer & Data BE', isActive: true, type: 'Area', teamCode: 'T00002', owner: 'Filip Rombauts' },
+    { id: 'sqwebb', title: 'Webb Squad', icon: 'Shield', description: 'EC&A Webb Squad', isActive: true, type: 'Squad', teamCode: 'T00003', owner: 'Hans Christiaens' },
+    { id: 'eca-global', title: 'EC&A GLOBAL', icon: 'Layers', description: 'Global Consolidation Dashboard', isActive: true, type: 'Tribe', teamCode: 'T99999', owner: 'Global Team' }
   ]);
 
   const [isAddOrgModalOpen, setIsAddOrgModalOpen] = useState(false);
