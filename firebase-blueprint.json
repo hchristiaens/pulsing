@@ -1,0 +1,66 @@
+{
+  "entities": {
+    "Organization": {
+      "title": "Organization",
+      "description": "Represents an organizational unit.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "icon": { "type": "string" },
+        "description": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "type": { "type": "string" },
+        "teamCode": { "type": "string" },
+        "owner": { "type": "string" }
+      }
+    },
+    "MetricHierarchy": {
+      "title": "MetricHierarchy",
+      "description": "Represents a metric in a hierarchy.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "value": { "type": "number" },
+        "unit": { "type": "string" },
+        "status": { "type": "string" },
+        "description": { "type": "string" },
+        "target": { "type": "number" },
+        "thresholds": { "type": "object" },
+        "decimals": { "type": "number" },
+        "enabled": { "type": "boolean" },
+        "dataSource": { "type": "string" },
+        "accountablePerson": { "type": "string" },
+        "children": { "type": "array" }
+      }
+    },
+    "AuditLogEntry": {
+      "title": "AuditLogEntry",
+      "description": "Tracks system changes.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "timestamp": { "type": "number" },
+        "userId": { "type": "string" },
+        "action": { "type": "string" },
+        "details": { "type": "string" },
+        "orgId": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "organizations": {
+      "schema": "Organization",
+      "description": "Collection of organizations"
+    },
+    "metrics": {
+      "schema": "MetricHierarchy",
+      "description": "Collection of metrics"
+    },
+    "auditLogs": {
+      "schema": "AuditLogEntry",
+      "description": "Collection of audit logs"
+    }
+  }
+}

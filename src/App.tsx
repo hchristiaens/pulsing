@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { db, auth } from './firebase';
+import { collection, getDocs, setDoc, doc } from 'firebase/firestore';
 import { 
   ChevronRight, 
   ChevronDown,
@@ -101,7 +103,7 @@ export default function App() {
       placeholderNote: "Enter operational updates or strategic notes...",
       savedSuccessfully: "Saved Successfully",
       selectOrg: "Select Organizational Unit",
-      allTypes: "All Unit Types",
+      allTypes: "All My Units",
       activeOnly: "Active Only",
       showingAll: "Showing All",
       auditLog: "Audit Log Trace"
@@ -352,12 +354,83 @@ export default function App() {
     return `${day}/${month}/${year}`;
   };
 
-  const [organizations, setOrganizations] = useState<Organization[]>([
-    { id: 'eca-be', title: 'EC&A BE', icon: 'Activity', description: 'Belgium Operations & Regional Cockpit', isActive: true, type: 'Area', teamCode: 'T00001', owner: 'Hans Christiaens' },
-    { id: 'eca-fr', title: 'EC&A FR', icon: 'Globe', description: 'France Strategic Business Unit', isActive: true, type: 'Area', teamCode: 'T00002', owner: 'Jean Dupont' },
-    { id: 'eca-uk', title: 'EC&A UK', icon: 'Shield', description: 'UK Logistics & Compliance', isActive: true, type: 'Area', teamCode: 'T00003', owner: 'Sarah Smith' },
-    { id: 'eca-global', title: 'EC&A GLOBAL', icon: 'Layers', description: 'Global Consolidation Dashboard', isActive: true, type: 'Community', teamCode: 'T99999', owner: 'Global Team' }
-  ]);
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
+
+  useEffect(() => {
+    const initialOrganizations: Organization[] = [
+      { id: 'eca-be', title: 'EC&A BE', icon: 'Activity', description: 'Belgium Operations & Regional Cockpit', isActive: true, type: 'Area', teamCode: 'T00001', owner: 'Hans Christiaens' },
+      { id: 'eca-fr', title: 'Customer & Data', icon: 'Globe', description: 'Customer & Data BE', isActive: true, type: 'Area', teamCode: 'T00002', owner: 'Filip Rombouts' },
+      { id: 'eca-uk', title: 'Webb Squad', icon: 'Shield', description: 'Automation & Monitoring', isActive: true, type: 'Area', teamCode: 'T00003', owner: 'Hans Christiaens' },
+      { id: 'eca-global', title: 'EC&A GLOBAL', icon: 'Layers', description: 'Global Consolidation Dashboard', isActive: true, type: 'Community', teamCode: 'T99999', owner: 'Global Team' }
+    ];
+
+    enum OperationType {
+      CREATE = 'create',
+      UPDATE = 'update',
+      DELETE = 'delete',
+      LIST = 'list',
+      GET = 'get',
+      WRITE = 'write',
+    }
+
+    interface FirestoreErrorInfo {
+      error: string;
+      operationType: OperationType;
+      path: string | null;
+      authInfo: {
+        userId?: string | null;
+        email?: string | null;
+        emailVerified?: boolean | null;
+        isAnonymous?: boolean | null;
+        tenantId?: string | null;
+        providerInfo?: {
+          providerId?: string | null;
+          email?: string | null;
+        }[];
+      }
+    }
+
+    function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+      const errInfo: FirestoreErrorInfo = {
+        error: error instanceof Error ? error.message : String(error),
+        authInfo: {
+          userId: auth.currentUser?.uid,
+          email: auth.currentUser?.email,
+          emailVerified: auth.currentUser?.emailVerified,
+          isAnonymous: auth.currentUser?.isAnonymous,
+          tenantId: auth.currentUser?.tenantId,
+          providerInfo: auth.currentUser?.providerData?.map(provider => ({
+            providerId: provider.providerId,
+            email: provider.email,
+          })) || []
+        },
+        operationType,
+        path
+      }
+      console.error('Firestore Error: ', JSON.stringify(errInfo));
+      throw new Error(JSON.stringify(errInfo));
+    }
+
+    const fetchOrganizations = async () => {
+      try {
+        const orgsCol = collection(db, 'organizations');
+        const orgsSnapshot = await getDocs(orgsCol);
+        if (orgsSnapshot.empty) {
+          // Seed with initial values if empty
+          for (const org of initialOrganizations) {
+            await setDoc(doc(db, 'organizations', org.id), org);
+          }
+          setOrganizations(initialOrganizations);
+        } else {
+          const orgsList = orgsSnapshot.docs.map(doc => doc.data() as Organization);
+          setOrganizations(orgsList);
+        }
+      } catch (error) {
+        handleFirestoreError(error, OperationType.GET, 'organizations');
+      }
+    };
+    fetchOrganizations();
+  }, []);
 
   const [isAddOrgModalOpen, setIsAddOrgModalOpen] = useState(false);
   const [isAddMetricModalOpen, setIsAddMetricModalOpen] = useState(false);
@@ -1737,7 +1810,7 @@ export default function App() {
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 w-full max-w-7xl px-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 w-full max-w-7xl px-4">
                     {filteredOrganizations.map((org, index) => {
                       const Icon = availableIcons[org.icon as keyof typeof availableIcons] || Building;
                       const baseBgColor = orgColors[index % orgColors.length];
