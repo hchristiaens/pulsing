@@ -1,0 +1,8 @@
+google-adk
+google-cloud-monitoring
+pandas
+requests
+openpyxl
+sqlalchemy
+elasticsearch
+psycopg2-binary
