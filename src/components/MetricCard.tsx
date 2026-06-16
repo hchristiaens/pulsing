@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from 'motion/react';
-import { RAGStatus, MetricNote } from '../types.ts';
-import { cn } from '../lib/utils.ts';
+import { RAGStatus, MetricNote } from '../types';
+import { cn } from '../lib/utils';
+import { calculateLinearRegression } from '../services/metricService';
 import { 
   ArrowUpRight, 
   ArrowDownRight, 
@@ -18,7 +19,7 @@ import {
   PlusCircle,
   Eye
 } from 'lucide-react';
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
   LineChart, 
   Line, 
@@ -74,6 +75,30 @@ export function MetricCard({
   adviceText = "API ADVICE: not yet implemented"
 }: MetricCardProps) {
   const [showMenu, setShowMenu] = useState(false);
+
+  const regression = useMemo(() => calculateLinearRegression(history), [history]);
+  const predictions = useMemo(() => [
+    { value: regression.intercept + regression.slope * history.length, isPrediction: true },
+    { value: regression.intercept + regression.slope * (history.length + 1), isPrediction: true },
+    { value: regression.intercept + regression.slope * (history.length + 2), isPrediction: true }
+  ], [regression, history.length]);
+
+  const chartData = useMemo(() => [
+    ...(history.slice(-12).map((val, idx) => ({
+      value: val,
+      isPrediction: false,
+      dateLabel: new Date(Date.now() - ((history.length - 1 - idx) * 86400000)).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+    }))),
+    ...predictions.map((p, i) => ({
+      ...p,
+      dateLabel: `Proj ${i + 1}`
+    }))
+  ], [history, predictions]);
+
+  const calculatedAdvice = useMemo(() => {
+    const trend = regression.slope > 0 ? "improving" : regression.slope < 0 ? "declining" : "stable";
+    return `Projected trend is ${trend}. Expected value in 3 periods: ${predictions[2].value.toFixed(2)}${unit}`;
+  }, [regression, predictions, unit]);
 
   const formatDate = (date: Date | string | number) => {
     if (!date) return '';
@@ -267,7 +292,7 @@ export function MetricCard({
             </p>
             <div className="mt-2 pt-2 border-t border-slate-50 dark:border-slate-800">
               <span className="text-[9px] font-black text-slate-300 dark:text-slate-600 uppercase tracking-widest">
-                {adviceText}
+                {calculatedAdvice}
               </span>
             </div>
           </div>

@@ -12,8 +12,8 @@ import {
   RotateCcw,
   Check
 } from 'lucide-react';
-import { MetricHierarchy, RAGStatus, MetricNote } from '../types.ts';
-import { cn } from '../lib/utils.ts';
+import { MetricHierarchy, RAGStatus, MetricNote } from '../types';
+import { cn } from '../lib/utils';
 import { 
   LineChart, 
   Line, 

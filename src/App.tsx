@@ -1,6 +1,6 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, Fragment } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { db, auth } from './firebase.ts';
+import { db } from './firebase';
 import { collection, getDocs, setDoc, doc } from 'firebase/firestore';
 import { 
   ChevronRight, 
@@ -36,12 +36,12 @@ import {
   MoreVertical,
   Menu
 } from 'lucide-react';
-import { MetricHierarchy, AuditLogEntry, AppView, RAGStatus, Organization } from './types.ts';
-import { useMetrics } from './hooks/useMetrics.ts';
-import { MetricCard } from './components/MetricCard.tsx';
-import { MetricDetailHeader } from './components/MetricDetailHeader.tsx';
-import { calculateStatus } from './services/metricService.ts';
-import { cn } from './lib/utils.ts';
+import { MetricHierarchy, AuditLogEntry, AppView, RAGStatus, Organization } from './types';
+import { useMetrics } from './hooks/useMetrics';
+import { MetricCard } from './components/MetricCard';
+import { MetricDetailHeader } from './components/MetricDetailHeader';
+import { calculateStatus } from './services/metricService';
+import { cn } from './lib/utils';
 
 export default function App() {
   const [currentOrgId, setCurrentOrgId] = useState<string | null>(null);
@@ -364,69 +364,18 @@ export default function App() {
       { id: 'eca-global', title: 'EC&A GLOBAL', icon: 'Layers', description: 'Global Consolidation Dashboard', isActive: true, type: 'Community', teamCode: 'T99999', owner: 'Global Team' }
     ];
 
-    enum OperationType {
-      CREATE = 'create',
-      UPDATE = 'update',
-      DELETE = 'delete',
-      LIST = 'list',
-      GET = 'get',
-      WRITE = 'write',
-    }
-
-    interface FirestoreErrorInfo {
-      error: string;
-      operationType: OperationType;
-      path: string | null;
-      authInfo: {
-        userId?: string | null;
-        email?: string | null;
-        emailVerified?: boolean | null;
-        isAnonymous?: boolean | null;
-        tenantId?: string | null;
-        providerInfo?: {
-          providerId?: string | null;
-          email?: string | null;
-        }[];
-      }
-    }
-
-    function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-      const errInfo: FirestoreErrorInfo = {
-        error: error instanceof Error ? error.message : String(error),
-        authInfo: {
-          userId: auth.currentUser?.uid,
-          email: auth.currentUser?.email,
-          emailVerified: auth.currentUser?.emailVerified,
-          isAnonymous: auth.currentUser?.isAnonymous,
-          tenantId: auth.currentUser?.tenantId,
-          providerInfo: auth.currentUser?.providerData?.map(provider => ({
-            providerId: provider.providerId,
-            email: provider.email,
-          })) || []
-        },
-        operationType,
-        path
-      }
-      console.error('Firestore Error: ', JSON.stringify(errInfo));
-      throw new Error(JSON.stringify(errInfo));
-    }
-
     const fetchOrganizations = async () => {
-      try {
-        const orgsCol = collection(db, 'organizations');
-        const orgsSnapshot = await getDocs(orgsCol);
-        if (orgsSnapshot.empty) {
-          // Seed with initial values if empty
-          for (const org of initialOrganizations) {
-            await setDoc(doc(db, 'organizations', org.id), org);
-          }
-          setOrganizations(initialOrganizations);
-        } else {
-          const orgsList = orgsSnapshot.docs.map(doc => doc.data() as Organization);
-          setOrganizations(orgsList);
+      const orgsCol = collection(db, 'organizations');
+      const orgsSnapshot = await getDocs(orgsCol);
+      if (orgsSnapshot.empty) {
+        // Seed with initial values if empty
+        for (const org of initialOrganizations) {
+          await setDoc(doc(db, 'organizations', org.id), org);
         }
-      } catch (error) {
-        handleFirestoreError(error, OperationType.GET, 'organizations');
+        setOrganizations(initialOrganizations);
+      } else {
+        const orgsList = orgsSnapshot.docs.map(doc => doc.data() as Organization);
+        setOrganizations(orgsList);
       }
     };
     fetchOrganizations();
@@ -1247,8 +1196,8 @@ export default function App() {
                     target: formData.get('target') ? Number(formData.get('target')) : editingMetric.target,
                     lastUpdated: Date.now(),
                     thresholds: {
-                      red: Number(formData.get('red')),
-                      amber: Number(formData.get('amber'))
+                      red: Number(String(formData.get('red')).replace(',', '.')),
+                      amber: Number(String(formData.get('amber')).replace(',', '.'))
                     }
                   });
                   setIsEditMetricModalOpen(false);
@@ -1307,6 +1256,19 @@ export default function App() {
                       </div>
                     )}
 
+                    {/* Deadline - Only for Layer 3 */}
+                    {selectedPath.length >= 2 && (
+                      <div className="space-y-1.5 pt-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase px-1">Deadline Date</label>
+                        <input 
+                          type="date"
+                          name="deadline"
+                          defaultValue={editingMetric.deadline ? new Date(editingMetric.deadline).toISOString().split('T')[0] : ''}
+                          className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-slate-900 outline-none" 
+                        />
+                      </div>
+                    )}
+
                     {/* Source / Logic - Only for Layer 3 */}
                     {selectedPath.length >= 2 && (
                       <div className="space-y-4 pt-2 border-t border-slate-100">
@@ -1359,11 +1321,11 @@ export default function App() {
                     <div className="grid grid-cols-2 gap-4 pt-2">
                       <div className="space-y-1.5">
                         <label className="text-[10px] font-black text-rose-500 uppercase px-1">Red &lt;</label>
-                        <input type="number" name="red" step="0.01" defaultValue={editingMetric.thresholds.red} className="w-full px-4 py-3 bg-rose-50/30 border border-rose-100 rounded-xl text-sm font-black text-rose-600 focus:ring-2 focus:ring-rose-500 outline-none" />
+                        <input type="text" name="red" defaultValue={editingMetric.thresholds.red.toString().replace('.', ',')} onBlur={(e) => { const v = parseFloat(e.target.value.replace(',', '.')); if (!isNaN(v)) e.target.value = v.toFixed(2).replace('.', ','); }} className="w-full px-4 py-3 bg-rose-50/30 border border-rose-100 rounded-xl text-sm font-black text-rose-600 focus:ring-2 focus:ring-rose-500 outline-none" />
                       </div>
                       <div className="space-y-1.5">
                         <label className="text-[10px] font-black text-amber-500 uppercase px-1">Amber &lt;</label>
-                        <input type="number" name="amber" step="0.01" defaultValue={editingMetric.thresholds.amber} className="w-full px-4 py-3 bg-amber-50/30 border border-amber-100 rounded-xl text-sm font-black text-amber-600 focus:ring-2 focus:ring-amber-500 outline-none" />
+                        <input type="text" name="amber" defaultValue={editingMetric.thresholds.amber.toString().replace('.', ',')} onBlur={(e) => { const v = parseFloat(e.target.value.replace(',', '.')); if (!isNaN(v)) e.target.value = v.toFixed(2).replace('.', ','); }} className="w-full px-4 py-3 bg-amber-50/30 border border-amber-100 rounded-xl text-sm font-black text-amber-600 focus:ring-2 focus:ring-amber-500 outline-none" />
                       </div>
                     </div>
                   </div>
@@ -1996,7 +1958,7 @@ export default function App() {
                              </button>
                              <span className="text-slate-300">/</span>
                              {selectedPath.map((node, idx) => (
-                               <React.Fragment key={`${node.id}-breadcrumb-${idx}`}>
+                               <Fragment key={`${node.id}-breadcrumb-${idx}`}>
                                  <button 
                                    onClick={() => {
                                       if (idx < selectedPath.length - 1) {
@@ -2014,7 +1976,7 @@ export default function App() {
                                    {node.title}
                                  </button>
                                  {idx < selectedPath.length - 1 && <span className="text-slate-300">/</span>}
-                               </React.Fragment>
+                               </Fragment>
                              ))}
                              <span className="ml-2 px-2 py-0.5 bg-slate-900 text-white text-[9px] rounded-md uppercase tracking-widest font-black">L{currentLevel}</span>
                           </div>
