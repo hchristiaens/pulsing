@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from 'motion/react';
-import { RAGStatus, MetricNote } from '../types';
-import { cn } from '../lib/utils';
+import { RAGStatus, MetricNote } from '../types.ts';
+import { cn } from '../lib/utils.ts';
 import { 
   ArrowUpRight, 
   ArrowDownRight, 

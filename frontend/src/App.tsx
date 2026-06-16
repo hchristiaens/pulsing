@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { db, auth } from './firebase';
+import { db, auth } from './firebase.ts';
 import { collection, getDocs, setDoc, doc } from 'firebase/firestore';
 import { 
   ChevronRight, 
@@ -36,12 +36,12 @@ import {
   MoreVertical,
   Menu
 } from 'lucide-react';
-import { MetricHierarchy, AuditLogEntry, AppView, RAGStatus, Organization } from './types';
-import { useMetrics } from './hooks/useMetrics';
-import { MetricCard } from './components/MetricCard';
-import { MetricDetailHeader } from './components/MetricDetailHeader';
-import { calculateStatus } from './services/metricService';
-import { cn } from './lib/utils';
+import { MetricHierarchy, AuditLogEntry, AppView, RAGStatus, Organization } from './types.ts';
+import { useMetrics } from './hooks/useMetrics.ts';
+import { MetricCard } from './components/MetricCard.tsx';
+import { MetricDetailHeader } from './components/MetricDetailHeader.tsx';
+import { calculateStatus } from './services/metricService.ts';
+import { cn } from './lib/utils.ts';
 
 export default function App() {
   const [currentOrgId, setCurrentOrgId] = useState<string | null>(null);

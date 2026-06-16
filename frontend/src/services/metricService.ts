@@ -1,5 +1,5 @@
 import yaml from 'js-yaml';
-import { MetricHierarchy, RAGStatus } from '../types';
+import { MetricHierarchy, RAGStatus } from '../types.ts';
 
 export interface ConfigMetric {
   id: string;

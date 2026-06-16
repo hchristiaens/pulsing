@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { MetricHierarchy, AuditLogEntry, RAGStatus } from '../types';
-import { fetchMetricConfig, ConfigMetric, calculateStatus } from '../services/metricService';
+import { MetricHierarchy, AuditLogEntry, RAGStatus } from '../types.ts';
+import { fetchMetricConfig, ConfigMetric, calculateStatus } from '../services/metricService.ts';
 
 export function useMetrics(orgId: string | null) {
   const [hierarchies, setHierarchies] = useState<Record<string, MetricHierarchy[]>>({});
