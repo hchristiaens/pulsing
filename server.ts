@@ -26,7 +26,7 @@ async function startServer() {
     while (retries > 0) {
       try {
         response = await ai.models.generateContent({
-          model: "gemini-2.0-flash",
+          model: "gemini-3.5-flash",
           contents: `Analyze the performance of this metric: ${metricName}. 
           Description: ${description}
           History (last 12): ${history?.slice(-12).join(',')}
@@ -39,8 +39,16 @@ async function startServer() {
         });
         break;
       } catch (error: any) {
-        console.error("Gemini API error:", error);
-        if (error.status === 503 && retries > 1) {
+        console.error(`Gemini API error (retry ${5 - retries + 1}/5) detected:`, error);
+        
+        // Robust check for 503 status
+        const is503 = error.status === 503 || 
+                      error.error?.code === 503 || 
+                      error.message?.includes('503') ||
+                      JSON.stringify(error).includes('503') ||
+                      error.message?.toLowerCase().includes('unavailable');
+        
+        if (is503 && retries > 1) {
           retries--;
           const delay = Math.pow(2, 5 - retries) * 2000;
           console.log(`Retrying in ${delay}ms...`);

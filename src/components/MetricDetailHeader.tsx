@@ -14,13 +14,15 @@ import {
 } from 'lucide-react';
 import { MetricHierarchy, RAGStatus, MetricNote } from '../types';
 import { cn } from '../lib/utils';
+import { calculateLinearRegression } from '../services/metricService';
 import { 
   LineChart, 
   Line, 
   XAxis, 
   YAxis, 
   Tooltip, 
-  ResponsiveContainer 
+  ResponsiveContainer,
+  ReferenceLine
 } from 'recharts';
 
 interface MetricDetailHeaderProps {
@@ -40,6 +42,27 @@ export function MetricDetailHeader({ metric, onClose, onUpdateMetric, addLog, t 
   const [isInfoEdited, setIsInfoEdited] = useState(false);
   const [isNoteEdited, setIsNoteEdited] = useState(false);
   const [showSaveFeedback, setShowSaveFeedback] = useState(false);
+
+  const history = metric.history || [];
+  const regression = useMemo(() => calculateLinearRegression(history), [history]);
+  const predictions = useMemo(() => [
+    { value: regression.intercept + regression.slope * history.length, isPrediction: true },
+    { value: regression.intercept + regression.slope * (history.length + 1), isPrediction: true },
+    { value: regression.intercept + regression.slope * (history.length + 2), isPrediction: true }
+  ], [regression, history.length]);
+
+  const chartData = useMemo(() => [
+    ...(history.slice(-12).map((val, idx) => ({
+      value: val,
+      isPrediction: false,
+      dateLabel: new Date(Date.now() - ((history.length - 1 - idx) * 86400000)).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+    }))),
+    ...predictions.map((p, i) => ({
+      ...p,
+      dateLabel: `Proj ${i + 1}`,
+      isPrediction: true
+    }))
+  ], [history, predictions]);
 
   const formatValue = (val: number, decimals: number = 2) => {
     const formatted = val.toLocaleString('de-DE', { 
@@ -331,16 +354,7 @@ export function MetricDetailHeader({ metric, onClose, onUpdateMetric, addLog, t 
                   </div>
                   <div className="flex-1 bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-4 -ml-6">
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart 
-                        data={(metric.history || []).slice(-12).map((val, idx) => {
-                          const date = new Date();
-                          date.setDate(date.getDate() - ((metric.history?.length || 1) - 1 - idx));
-                          return {
-                            value: val,
-                            dateLabel: date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-                          }
-                        })}
-                      >
+                      <LineChart data={chartData}>
                         <XAxis 
                           dataKey="dateLabel" 
                           axisLine={false}
@@ -360,7 +374,7 @@ export function MetricDetailHeader({ metric, onClose, onUpdateMetric, addLog, t 
                               return (
                                 <div className="bg-slate-900 dark:bg-slate-950 text-white p-3 rounded-2xl text-xs shadow-2xl border border-slate-700 dark:border-slate-800">
                                   <p className="font-black border-b border-slate-700 dark:border-slate-800 pb-1.5 mb-1.5 uppercase tracking-widest">{payload[0].payload.dateLabel}</p>
-                                  <p className="text-blue-400 font-bold text-lg">{payload[0].value}{metric.unit}</p>
+                                  <p className={cn("font-bold text-lg", payload[0].payload.isPrediction ? "text-amber-400" : "text-blue-400")}>{payload[0].value.toFixed(metric.decimals || 0)}{metric.unit}</p>
                                 </div>
                               );
                             }
@@ -373,8 +387,17 @@ export function MetricDetailHeader({ metric, onClose, onUpdateMetric, addLog, t 
                           stroke="currentColor" 
                           className="text-slate-900 dark:text-blue-400 transition-colors"
                           strokeWidth={3} 
-                          dot={{ r: 4, strokeWidth: 2, fill: '#fff' }}
+                          dot={(props: any) => props.payload.isPrediction ? null : <circle cx={props.cx} cy={props.cy} r={4} fill="#fff" stroke="currentColor" strokeWidth={2} />}
                           activeDot={{ r: 6, strokeWidth: 0, fill: '#3b82f6' }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="value"
+                          stroke="#fbbf24"
+                          strokeDasharray="5 5"
+                          strokeWidth={2}
+                          dot={false}
+                          activeDot={false}
                         />
                       </LineChart>
                     </ResponsiveContainer>

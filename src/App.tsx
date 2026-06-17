@@ -50,7 +50,6 @@ export default function App() {
   const [activeView, setActiveView] = useState<AppView>('org-selection');
   const [selectedDetailMetricId, setSelectedDetailMetricId] = useState<string | null>(null);
   const [language, setLanguage] = useState<'EN' | 'NL' | 'FR' | 'ES' | 'DE'>('EN');
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
   
   const translations = {
     EN: {
@@ -359,10 +358,10 @@ export default function App() {
 
   useEffect(() => {
     const initialOrganizations: Organization[] = [
-      { id: 'eca-be', title: 'EC&A BE', icon: 'Activity', description: 'Belgium Operations & Regional Cockpit', isActive: true, type: 'Area', teamCode: 'T00001', owner: 'Hans Christiaens' },
-      { id: 'eca-fr', title: 'Customer & Data', icon: 'Globe', description: 'Customer & Data BE', isActive: true, type: 'Area', teamCode: 'T00002', owner: 'Filip Rombouts' },
-      { id: 'eca-uk', title: 'Webb Squad', icon: 'Shield', description: 'Automation & Monitoring', isActive: true, type: 'Area', teamCode: 'T00003', owner: 'Hans Christiaens' },
-      { id: 'eca-global', title: 'EC&A GLOBAL', icon: 'Layers', description: 'Global Consolidation Dashboard', isActive: true, type: 'Community', teamCode: 'T99999', owner: 'Global Team' }
+      { id: 'eca-be', title: 'EC&A BE', icon: 'Activity', description: 'Belgium Operations & Regional Cockpit', isActive: true, type: 'Area', teamCode: 'T00001', owner: 'John Doe' },
+      { id: 'eca-fr', title: 'Customer & Data', icon: 'Globe', description: 'Customer & Data BE', isActive: true, type: 'Area', teamCode: 'T00002', owner: 'John Doe' },
+      { id: 'eca-uk', title: 'Webb Squad', icon: 'Shield', description: 'Automation & Monitoring', isActive: true, type: 'Area', teamCode: 'T00003', owner: 'John Doe' },
+      { id: 'eca-global', title: 'EC&A GLOBAL', icon: 'Layers', description: 'Global Consolidation Dashboard', isActive: true, type: 'Community', teamCode: 'T99999', owner: 'John Doe' }
     ];
 
     const fetchOrganizations = async () => {
@@ -376,6 +375,14 @@ export default function App() {
         setOrganizations(initialOrganizations);
       } else {
         const orgsList = orgsSnapshot.docs.map(doc => doc.data() as Organization);
+        
+        // CHECK FOR DUPLICATES
+        const ids = orgsList.map(o => o.id);
+        const uniqueIds = new Set(ids);
+        if (ids.length !== uniqueIds.size) {
+          console.error("DUPLICATE ORGANIZATION IDs FOUND:", ids.filter((id, i) => ids.indexOf(id) !== i));
+        }
+        
         setOrganizations(orgsList);
       }
     };
@@ -583,15 +590,6 @@ export default function App() {
     }
   }, [editingMetric]);
 
-  // Apply theme class to document
-  useEffect(() => {
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, [theme]);
-
   // Handle auto-refresh
   useEffect(() => {
     if (refreshIntervalSec <= 0) return;
@@ -642,7 +640,14 @@ export default function App() {
       minimumFractionDigits: decimals, 
       maximumFractionDigits: decimals 
     });
-    return unit === '€' ? `€${formatted}` : `${val.toFixed(decimals)}${unit}`;
+    
+    if (unit === '%') {
+      return `${formatted}%`;
+    }
+    if (unit === '€') {
+      return `€${formatted}`;
+    }
+    return `${formatted}${unit}`;
   };
 
   const handleDrillDown = async (metric: MetricHierarchy) => {
@@ -947,6 +952,7 @@ export default function App() {
     });
   }, [organizations, orgSearchQuery, orgTypeFilter, showOnlyActiveOrgs]);
 
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-400">
@@ -957,7 +963,7 @@ export default function App() {
   }
 
   return (
-    <div className={cn("flex h-screen w-full bg-slate-50 dark:bg-slate-950 font-sans transition-colors duration-300", theme)}>
+    <div className={cn("flex h-screen w-full bg-white dark:bg-black font-sans transition-colors duration-300")}>
       {/* Sidebar - only show when an organization is selected */}
       {activeView !== 'org-selection' && (
         <aside className="w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col p-6 space-y-8 transition-colors">
@@ -1194,6 +1200,7 @@ export default function App() {
                     enabled: formData.get('enabled') === 'on',
                     decimals: Number(formData.get('decimals')),
                     dataSource: formData.get('dataSource') as any,
+                    manualValue: Number(formData.get('manualValue')),
                     manualDenominator: formData.get('manualDenominator') ? Number(formData.get('manualDenominator')) : 100,
                     target: formData.get('target') ? Number(formData.get('target')) : editingMetric.target,
                     lastUpdated: Date.now(),
@@ -1272,7 +1279,7 @@ export default function App() {
                     )}
 
                     {/* Source / Logic - Only for Layer 3 */}
-                    {selectedPath.length >= 2 && (
+                    {selectedPath.length === 2 && (
                       <div className="space-y-4 pt-2 border-t border-slate-100">
                         <div className="space-y-1.5">
                           <label className="text-[10px] font-black text-slate-400 uppercase px-1">Data Source</label>
@@ -1290,16 +1297,29 @@ export default function App() {
                         </div>
                         
                         {selectedDataSource === 'Manual' && (
-                          <div className="space-y-1.5">
-                            <label className="text-[10px] font-black text-blue-500 uppercase px-1">Denominator (Optional)</label>
-                            <input 
-                              type="number" 
-                              name="manualDenominator" 
-                              step="any" 
-                              defaultValue={editingMetric.manualDenominator || 100} 
-                              className="w-full px-4 py-3 bg-blue-50 border border-blue-100 rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-600 outline-none" 
-                              placeholder="e.g. 100"
-                            />
+                          <div className="space-y-4">
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-black text-blue-500 uppercase px-1">Actual Manual Value</label>
+                              <input 
+                                type="number" 
+                                name="manualValue" 
+                                step="any" 
+                                defaultValue={editingMetric.manualValue || 0} 
+                                className="w-full px-4 py-3 bg-blue-50 border border-blue-100 rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-600 outline-none" 
+                                placeholder="e.g. 50"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-black text-blue-500 uppercase px-1">Denominator (Optional)</label>
+                              <input 
+                                type="number" 
+                                name="manualDenominator" 
+                                step="any" 
+                                defaultValue={editingMetric.manualDenominator || 100} 
+                                className="w-full px-4 py-3 bg-blue-50 border border-blue-100 rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-600 outline-none" 
+                                placeholder="e.g. 100"
+                              />
+                            </div>
                           </div>
                         )}
                       </div>
@@ -1571,7 +1591,7 @@ export default function App() {
                           <input 
                             type="text" 
                             className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-slate-900 dark:text-white font-bold focus:ring-2 focus:ring-slate-900 dark:focus:ring-slate-500 outline-none transition-all text-sm"
-                            placeholder="e.g. Hans Christiaens"
+                            placeholder="e.g. John Doe"
                             value={editOrgData.owner}
                             onChange={(e) => setEditOrgData({...editOrgData, owner: e.target.value})}
                           />
@@ -1784,7 +1804,7 @@ export default function App() {
                       
                       return (
                         <div
-                          key={`org-${org.id}-${index}`}
+                          key={`org-${org.id}`}
                           className={cn(
                             "group relative rounded-3xl p-4 text-left transition-all focus-within:ring-2 focus-within:ring-slate-900 shadow-md border border-slate-200/60 dark:border-slate-800 bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm",
                             org.isActive ? "hover:shadow-xl hover:-translate-y-1 cursor-pointer" : "cursor-default opacity-80",
@@ -1960,7 +1980,7 @@ export default function App() {
                              </button>
                              <span className="text-slate-300">/</span>
                              {selectedPath.map((node, idx) => (
-                               <Fragment key={`breadcrumb-${node.id}-${idx}`}>
+                               <Fragment key={`breadcrumb-${node.id}`}>
                                  <button 
                                    onClick={() => {
                                       if (idx < selectedPath.length - 1) {
@@ -2028,7 +2048,8 @@ export default function App() {
                   )}>
                     {currentLayer.filter(m => showDisabled || m.enabled !== false).map((metric, idx) => (
                       <MetricCard 
-                        key={`metric-${metric.id}-${idx}`} 
+                        key={`metric-${metric.id}`} 
+                        id={metric.id}
                         isLayer3={currentLevel === 3}
                         title={metric.title} 
                         value={formatMetricValue(metric.value, metric.unit, metric.decimals)} 
@@ -2046,7 +2067,11 @@ export default function App() {
                         notes={metric.notes}
                         lastUpdated={metric.lastUpdated}
                         onSelectDetail={() => setSelectedDetailMetricId(metric.id)}
-                        onEdit={() => { setEditingMetric(metric); setIsEditMetricModalOpen(true); }}
+                        onEdit={() => { 
+                          setEditingMetric(metric); 
+                          setSelectedDataSource(metric.dataSource || 'Manual'); 
+                          setIsEditMetricModalOpen(true); 
+                        }}
                         adviceText={t.apiAdvice}
                       />
                     ))}
@@ -2078,60 +2103,6 @@ export default function App() {
                   </div>
 
                   <div className="max-w-2xl space-y-8">
-                    {/* Theme Selection */}
-                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
-                      <div className="flex items-center gap-3 mb-6">
-                        <div className="h-8 w-8 rounded-lg bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center text-orange-600 dark:text-orange-400">
-                          {theme === 'light' ? <Zap size={18} /> : <Zap size={18} fill="currentColor" />}
-                        </div>
-                        <h3 className="font-bold text-slate-900 dark:text-white uppercase tracking-wider text-sm">{t.theme}</h3>
-                      </div>
-                      
-                      <div className="grid grid-cols-2 gap-4">
-                        <button 
-                          onClick={() => {
-                            const oldTheme = theme;
-                            setTheme('light');
-                            if (oldTheme !== 'light') {
-                              addLog('CONFIG_UPDATE', `Theme: "${oldTheme}" → "light"`);
-                            }
-                          }}
-                          className={cn(
-                            "flex flex-col items-center gap-3 p-6 rounded-xl border transition-all",
-                            theme === 'light' 
-                              ? "bg-slate-900 border-slate-900 text-white shadow-lg" 
-                              : "bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400"
-                          )}
-                        >
-                          <div className={cn("p-2 rounded-full", theme === 'light' ? "bg-white/10" : "bg-white dark:bg-slate-700 shadow-sm")}>
-                            <Zap size={24} className={theme === 'light' ? "text-white" : "text-yellow-500"} />
-                          </div>
-                          <span className="text-xs font-black uppercase tracking-widest">{t.lightMode}</span>
-                        </button>
-
-                        <button 
-                          onClick={() => {
-                            const oldTheme = theme;
-                            setTheme('dark');
-                            if (oldTheme !== 'dark') {
-                              addLog('CONFIG_UPDATE', `Theme: "${oldTheme}" → "dark"`);
-                            }
-                          }}
-                          className={cn(
-                            "flex flex-col items-center gap-3 p-6 rounded-xl border transition-all",
-                            theme === 'dark' 
-                              ? "bg-slate-900 border-slate-900 text-white shadow-lg ring-2 ring-slate-900/10" 
-                              : "bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400"
-                          )}
-                        >
-                          <div className={cn("p-2 rounded-full", theme === 'dark' ? "bg-white/10" : "bg-white dark:bg-slate-700 shadow-sm")}>
-                            <Zap size={24} fill="currentColor" className={theme === 'dark' ? "text-white" : "text-slate-400"} />
-                          </div>
-                          <span className="text-xs font-black uppercase tracking-widest">{t.darkMode}</span>
-                        </button>
-                      </div>
-                    </div>
-
                     {/* Language Selection */}
                     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
                       <div className="flex items-center gap-3 mb-6">
@@ -2241,7 +2212,7 @@ export default function App() {
               </div>
               <div className="flex-1 overflow-y-auto space-y-6">
                 {filteredLogs.map((log, idx) => (
-                  <div key={`log-${log.id}-${idx}`} className="relative pl-6 border-l border-slate-100 dark:border-slate-800">
+                  <div key={`log-${log.id}`} className="relative pl-6 border-l border-slate-100 dark:border-slate-800">
                     <div className="absolute -left-[3.5px] top-0 h-[7px] w-[7px] rounded-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700" />
                     <div className="mb-1 flex justify-between items-baseline"><span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">{formatDate(log.timestamp)} {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div>
                     <p className="text-sm text-slate-700 dark:text-slate-300 font-medium leading-relaxed">{log.details}</p>
