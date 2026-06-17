@@ -47,6 +47,17 @@
         "details": { "type": "string" },
         "orgId": { "type": "string" }
       }
+    },
+    "MetricData": {
+      "title": "MetricData",
+      "description": "Represents a single time-series datapoint for a metric.",
+      "type": "object",
+      "properties": {
+        "metricId": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "value": { "type": "number" }
+      },
+      "required": ["metricId", "date", "value"]
     }
   },
   "firestore": {
@@ -61,6 +72,10 @@
     "auditLogs": {
       "schema": "AuditLogEntry",
       "description": "Collection of audit logs"
+    },
+    "metrics_data": {
+      "schema": "MetricData",
+      "description": "Collection of metric time-series data"
     }
   }
 }
