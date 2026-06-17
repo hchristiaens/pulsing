@@ -17,6 +17,9 @@ export interface ConfigMetric {
 
 export async function fetchMetricConfig(): Promise<ConfigMetric[]> {
   const response = await fetch('/config/metrics.yaml');
+  if (!response.ok) {
+    throw new Error(`Failed to fetch metrics config: ${response.status} ${response.statusText}`);
+  }
   const text = await response.text();
   return yaml.load(text) as ConfigMetric[];
 }

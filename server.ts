@@ -18,19 +18,44 @@ async function startServer() {
   });
 
   app.post("/api/analyze-metric", async (req, res) => {
-    const { metricName } = req.body;
-    try {
-        const response = await ai.models.generateContent({
-          model: "gemini-3.5-flash",
-          contents: `Analyze the performance of this metric: ${metricName}. Summarize the trend and provide actionable advice.`,
+    console.log("Analyze metric request received:", req.body);
+    const { metricName, history, thresholds, notes, description } = req.body;
+    let retries = 5;
+    let response;
+    
+    while (retries > 0) {
+      try {
+        response = await ai.models.generateContent({
+          model: "gemini-2.0-flash",
+          contents: `Analyze the performance of this metric: ${metricName}. 
+          Description: ${description}
+          History (last 12): ${history?.slice(-12).join(',')}
+          Thresholds: ${JSON.stringify(thresholds)}
+          Notes: ${JSON.stringify(notes)}
+          Summarize the trend and provide actionable advice to improve.`,
           config: {
-            systemInstruction: "You are a team of expert data analysts. Collaborate to provide a comprehensive analysis of the following metric.",
+            systemInstruction: "You are a team of expert data analysts. Collaborate to provide a comprehensive, actionable, and data-driven analysis of the following metric based on the provided history, thresholds, and notes.",
           },
         });
-        res.json({ advice: response.text });
-    } catch (error) {
+        break;
+      } catch (error: any) {
         console.error("Gemini API error:", error);
-        res.status(500).json({ error: "Failed to analyze metric" });
+        if (error.status === 503 && retries > 1) {
+          retries--;
+          const delay = Math.pow(2, 5 - retries) * 2000;
+          console.log(`Retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+        res.status(500).json({ error: error.message || "Failed to analyze metric" });
+        return;
+      }
+    }
+    
+    if (response) {
+      res.json({ advice: response.text });
+    } else {
+      res.status(500).json({ error: "Failed to analyze metric after retries" });
     }
   });
 

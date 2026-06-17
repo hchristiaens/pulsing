@@ -224,7 +224,7 @@ export function MetricDetailHeader({ metric, onClose, onUpdateMetric, addLog, t 
 
           {/* Tab Content */}
           <div className="flex-1 p-8 overflow-hidden">
-            <AnimatePresence mode="wait">
+            <AnimatePresence>
               {activeTab === 'notes' && (
                 <motion.div 
                   key="notes"
