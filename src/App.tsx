@@ -34,7 +34,8 @@ import {
   AlertTriangle,
   PlusCircle,
   MoreVertical,
-  Menu
+  Menu,
+  Eye
 } from 'lucide-react';
 import { MetricHierarchy, AuditLogEntry, AppView, RAGStatus, Organization } from './types';
 import { useMetrics } from './hooks/useMetrics';
@@ -428,6 +429,7 @@ export default function App() {
   const [orgOwner, setOrgOwner] = useState('Hans Christiaens');
   const [layerFilter, setLayerFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [showDisabled, setShowDisabled] = useState(false);
 
   const [orgSearchQuery, setOrgSearchQuery] = useState('');
   const [orgTypeFilter, setOrgTypeFilter] = useState<string>('all');
@@ -1004,7 +1006,7 @@ export default function App() {
           <div className="max-w-6xl mx-auto" onClick={(e) => e.stopPropagation()}>
             
             {/* View Switching Logic */}
-            <AnimatePresence mode="wait">
+            <AnimatePresence>
               {/* Add Organization Modal */}
               {isAddOrgModalOpen && (
                 <div key="add-org-modal" className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -1076,7 +1078,7 @@ export default function App() {
                               onChange={(e) => setNewOrgData({...newOrgData, type: e.target.value as any})}
                             >
                               {['Squad', 'Area', 'IT Area', 'Tribe', 'Community'].map(t => (
-                                <option key={t} value={t}>{t}</option>
+                                <option key={'new-org-' + t} value={t}>{t}</option>
                               ))}
                             </select>
                           </div>
@@ -1598,7 +1600,7 @@ export default function App() {
                               onChange={(e) => setEditOrgData({...editOrgData, type: e.target.value as any})}
                             >
                               {['Squad', 'Area', 'IT Area', 'Tribe', 'Community'].map(t => (
-                                <option key={t} value={t}>{t}</option>
+                                <option key={'edit-org-' + t} value={t}>{t}</option>
                               ))}
                             </select>
                           </div>
@@ -1748,7 +1750,7 @@ export default function App() {
                       >
                         <option value="all">{t.allTypes}</option>
                         {['Squad', 'Area', 'IT Area', 'Tribe', 'Community'].map(t => (
-                          <option key={t} value={t}>{t}</option>
+                          <option key={'filter-' + t} value={t}>{t}</option>
                         ))}
                       </select>
                       <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
@@ -1782,7 +1784,7 @@ export default function App() {
                       
                       return (
                         <div
-                          key={org.id}
+                          key={`org-${org.id}-${index}`}
                           className={cn(
                             "group relative rounded-3xl p-4 text-left transition-all focus-within:ring-2 focus-within:ring-slate-900 shadow-md border border-slate-200/60 dark:border-slate-800 bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm",
                             org.isActive ? "hover:shadow-xl hover:-translate-y-1 cursor-pointer" : "cursor-default opacity-80",
@@ -1958,7 +1960,7 @@ export default function App() {
                              </button>
                              <span className="text-slate-300">/</span>
                              {selectedPath.map((node, idx) => (
-                               <Fragment key={`${node.id}-breadcrumb-${idx}`}>
+                               <Fragment key={`breadcrumb-${node.id}-${idx}`}>
                                  <button 
                                    onClick={() => {
                                       if (idx < selectedPath.length - 1) {
@@ -1979,6 +1981,20 @@ export default function App() {
                                </Fragment>
                              ))}
                              <span className="ml-2 px-2 py-0.5 bg-slate-900 text-white text-[9px] rounded-md uppercase tracking-widest font-black">L{currentLevel}</span>
+                              {currentLevel >= 2 && (
+                                <button
+                                  onClick={() => setShowDisabled(!showDisabled)}
+                                  className={cn(
+                                    "ml-4 flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
+                                    showDisabled 
+                                      ? "bg-slate-900 text-white shadow-lg"
+                                      : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                                  )}
+                                >
+                                  <Eye size={12} />
+                                  {showDisabled ? "Hide Disabled" : "Show Disabled"}
+                                </button>
+                              )}
                           </div>
                         ) : (
                           <div className="flex items-center gap-2">
@@ -2010,9 +2026,10 @@ export default function App() {
                       ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3" 
                       : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
                   )}>
-                    {currentLayer.filter(m => m.enabled !== false).map((metric) => (
+                    {currentLayer.filter(m => showDisabled || m.enabled !== false).map((metric, idx) => (
                       <MetricCard 
-                        key={metric.id} 
+                        key={`metric-${metric.id}-${idx}`} 
+                        isLayer3={currentLevel === 3}
                         title={metric.title} 
                         value={formatMetricValue(metric.value, metric.unit, metric.decimals)} 
                         status={metric.status} 
@@ -2034,7 +2051,7 @@ export default function App() {
                       />
                     ))}
 
-                    {/* Add Metric Button - Only on Layer 3 */}
+                     {/* Add Metric Button - Only on Layer 3 */}
                     {currentLevel === 3 && (
                       <button
                         onClick={() => setIsAddMetricModalOpen(true)}
@@ -2174,7 +2191,7 @@ export default function App() {
                   Recent Activity Pulse
                 </h4>
                 <div className="h-5 relative">
-                  <AnimatePresence mode="wait">
+                  <AnimatePresence>
                   {filteredLogs.filter(l => l.action === 'CONFIG_UPDATE').length > 0 ? (
                     <motion.p 
                       key={filteredLogs.filter(l => l.action === 'CONFIG_UPDATE')[0].id}
@@ -2224,7 +2241,7 @@ export default function App() {
               </div>
               <div className="flex-1 overflow-y-auto space-y-6">
                 {filteredLogs.map((log, idx) => (
-                  <div key={`${log.id}-${idx}`} className="relative pl-6 border-l border-slate-100 dark:border-slate-800">
+                  <div key={`log-${log.id}-${idx}`} className="relative pl-6 border-l border-slate-100 dark:border-slate-800">
                     <div className="absolute -left-[3.5px] top-0 h-[7px] w-[7px] rounded-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700" />
                     <div className="mb-1 flex justify-between items-baseline"><span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">{formatDate(log.timestamp)} {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div>
                     <p className="text-sm text-slate-700 dark:text-slate-300 font-medium leading-relaxed">{log.details}</p>

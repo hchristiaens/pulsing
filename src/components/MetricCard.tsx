@@ -1,7 +1,9 @@
 import { motion, AnimatePresence } from 'motion/react';
-import { RAGStatus, MetricNote } from '../types';
+import { RAGStatus, MetricNote, Thresholds } from '../types';
 import { cn } from '../lib/utils';
+import { FullScreenModal } from './FullScreenModal';
 import { calculateLinearRegression } from '../services/metricService';
+import { analyzeMetric } from '../services/analysisService';
 import { 
   ArrowUpRight, 
   ArrowDownRight, 
@@ -41,7 +43,7 @@ interface MetricCardProps {
   deadline?: string;
   onClick?: () => void | Promise<void>;
   isSelected?: boolean;
-  thresholds?: { red: number; amber: number };
+  thresholds?: Thresholds;
   enabled?: boolean;
   trend?: number; // 1: up, -1: down, 0: neutral
   history?: number[];
@@ -51,6 +53,7 @@ interface MetricCardProps {
   onSelectDetail?: () => void;
   onEdit?: () => void;
   adviceText?: string;
+  isLayer3?: boolean;
 }
 
 export function MetricCard({ 
@@ -72,9 +75,22 @@ export function MetricCard({
   lastUpdated,
   onSelectDetail,
   onEdit,
-  adviceText = "API ADVICE: not yet implemented"
+  adviceText = "API ADVICE: not yet implemented",
+  isLayer3 = false
 }: MetricCardProps) {
   const [showMenu, setShowMenu] = useState(false);
+  const [aiAdvice, setAiAdvice] = useState<string | undefined>();
+  const [loadingAi, setLoadingAi] = useState(false);
+  const [showAdviceModal, setShowAdviceModal] = useState(false);
+
+  useEffect(() => {
+    if (isLayer3 && enabled && thresholds) {
+        setLoadingAi(true);
+        analyzeMetric(title, history, thresholds, notes, description)
+            .then(setAiAdvice)
+            .finally(() => setLoadingAi(false));
+    }
+  }, [isLayer3, enabled, title, JSON.stringify(history), JSON.stringify(thresholds), JSON.stringify(notes), description]);
 
   const regression = useMemo(() => calculateLinearRegression(history), [history]);
   const predictions = useMemo(() => [
@@ -96,9 +112,11 @@ export function MetricCard({
   ], [history, predictions]);
 
   const calculatedAdvice = useMemo(() => {
+    if (aiAdvice) return aiAdvice;
+    if (loadingAi) return "Analyzing with AI...";
     const trend = regression.slope > 0 ? "improving" : regression.slope < 0 ? "declining" : "stable";
     return `Projected trend is ${trend}. Expected value in 3 periods: ${predictions[2].value.toFixed(2)}${unit}`;
-  }, [regression, predictions, unit]);
+  }, [regression, predictions, unit, aiAdvice, loadingAi]);
 
   const formatDate = (date: Date | string | number) => {
     if (!date) return '';
@@ -291,9 +309,12 @@ export function MetricCard({
               {description}
             </p>
             <div className="mt-2 pt-2 border-t border-slate-50 dark:border-slate-800">
-              <span className="text-[9px] font-black text-slate-300 dark:text-slate-600 uppercase tracking-widest">
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowAdviceModal(true); }}
+                className="w-full text-left text-[9px] font-black text-slate-300 dark:text-slate-600 uppercase tracking-widest hover:text-slate-600 dark:hover:text-slate-300 transition-colors cursor-pointer line-clamp-1"
+              >
                 {calculatedAdvice}
-              </span>
+              </button>
             </div>
           </div>
         </div>
@@ -303,6 +324,16 @@ export function MetricCard({
           !enabled ? 'bg-slate-200 dark:bg-slate-800' : (status === 'GREEN' ? 'bg-emerald-500' : status === 'AMBER' ? 'bg-amber-500' : 'bg-rose-500')
         )} />
       </motion.div>
+      <FullScreenModal isOpen={showAdviceModal} onClose={() => setShowAdviceModal(false)}>
+        <h3 className="text-xl md:text-2xl font-bold text-slate-900 dark:text-slate-100 uppercase tracking-widest mb-6">Detailed Advice</h3>
+        <p className="text-lg text-slate-600 dark:text-slate-300 whitespace-pre-line leading-relaxed mb-8">{calculatedAdvice}</p>
+        <button 
+            onClick={() => setShowAdviceModal(false)}
+            className="w-full py-4 bg-slate-900 text-white rounded-xl font-bold uppercase tracking-widest hover:bg-slate-700 transition-colors"
+          >
+            Close
+        </button>
+      </FullScreenModal>
     </div>
   );
 }
