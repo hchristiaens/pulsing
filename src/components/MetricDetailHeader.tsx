@@ -56,13 +56,10 @@ export function MetricDetailHeader({ metric, onClose, onUpdateMetric, addLog, t 
       value: val,
       isPrediction: false,
       dateLabel: new Date(Date.now() - ((history.length - 1 - idx) * 86400000)).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-    }))),
-    ...predictions.map((p, i) => ({
-      ...p,
-      dateLabel: `Proj ${i + 1}`,
-      isPrediction: true
-    }))
-  ], [history, predictions]);
+    })))
+  ], [history]);
+
+  const historicalData = chartData;
 
   const formatValue = (val: number, decimals: number = 2) => {
     const formatted = val.toLocaleString('de-DE', { 
@@ -354,7 +351,7 @@ export function MetricDetailHeader({ metric, onClose, onUpdateMetric, addLog, t 
                   </div>
                   <div className="flex-1 bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-4 -ml-6">
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={chartData}>
+                      <LineChart data={historicalData}>
                         <XAxis 
                           dataKey="dateLabel" 
                           axisLine={false}
@@ -383,21 +380,24 @@ export function MetricDetailHeader({ metric, onClose, onUpdateMetric, addLog, t 
                         />
                         <Line 
                           type="monotone" 
-                          dataKey="value" 
-                          stroke="currentColor" 
-                          className="text-slate-900 dark:text-blue-400 transition-colors"
-                          strokeWidth={3} 
-                          dot={(props: any) => props.payload.isPrediction ? null : <circle cx={props.cx} cy={props.cy} r={4} fill="#fff" stroke="currentColor" strokeWidth={2} />}
-                          activeDot={{ r: 6, strokeWidth: 0, fill: '#3b82f6' }}
-                        />
-                        <Line
-                          type="monotone"
+                          data={historicalData}
                           dataKey="value"
-                          stroke="#fbbf24"
-                          strokeDasharray="5 5"
-                          strokeWidth={2}
-                          dot={false}
-                          activeDot={false}
+                          stroke="currentColor" 
+                          className="text-slate-400 transition-colors"
+                          strokeWidth={3}
+                          dot={(props: any) => {
+                            if (props.payload.isPrediction) return null;
+                            const isBelowTarget = props.payload.value < (metric.target || 1);
+                            return <circle 
+                              cx={props.cx} 
+                              cy={props.cy} 
+                              r={4} 
+                              fill={isBelowTarget ? '#f43f5e' : '#10b981'} 
+                              stroke="#fff" 
+                              strokeWidth={2} 
+                            />
+                          }}
+                          activeDot={{ r: 6, strokeWidth: 0, fill: '#3b82f6' }}
                         />
                       </LineChart>
                     </ResponsiveContainer>

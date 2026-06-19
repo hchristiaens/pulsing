@@ -2,6 +2,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { RAGStatus, MetricNote, Thresholds } from '../types';
 import { cn } from '../lib/utils';
 import { AdviceModal } from './AdviceModal';
+import { ConfirmationModal } from './ConfirmationModal';
 import { calculateLinearRegression } from '../services/metricService';
 import { analyzeMetric } from '../services/analysisService';
 import { 
@@ -11,7 +12,9 @@ import {
   Info, 
   MoreVertical, 
   Edit2,
-  Eye
+  Eye,
+  Trash2,
+  EyeOff
 } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { 
@@ -39,8 +42,11 @@ interface MetricCardProps {
   lastUpdated?: number;
   onSelectDetail?: () => void;
   onEdit?: () => void;
+  onDelete?: () => void;
+  onToggleEnabled?: () => void;
   adviceText?: string;
   isLayer3?: boolean;
+  currentLevel?: number;
 }
 
 export function MetricCard({ 
@@ -63,13 +69,17 @@ export function MetricCard({
   lastUpdated,
   onSelectDetail,
   onEdit,
+  onDelete,
+  onToggleEnabled,
   adviceText = "API ADVICE: not yet implemented",
-  isLayer3 = false
+  isLayer3 = false,
+  currentLevel = 1
 }: MetricCardProps) {
   const [showMenu, setShowMenu] = useState(false);
   const [aiAdvice, setAiAdvice] = useState<string | undefined>();
   const [loadingAi, setLoadingAi] = useState(false);
   const [showAdviceModal, setShowAdviceModal] = useState(false);
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
 
   useEffect(() => {
     if (isLayer3 && enabled && thresholds) {
@@ -165,49 +175,75 @@ export function MetricCard({
               </h3>
               
               {/* Hamburger Menu */}
-              {enabled && (
-                <div className="absolute top-4 right-4 z-20">
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }}
-                    className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
-                  >
-                    <MoreVertical size={16} />
-                  </button>
-                  
-                  <AnimatePresence>
-                    {showMenu && (
-                      <>
-                        <motion.div 
-                          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                          onClick={(e) => { e.stopPropagation(); setShowMenu(false); }}
-                          className="fixed inset-0 z-30" 
-                        />
-                        <motion.div
-                          initial={{ opacity: 0, scale: 0.95, y: -10 }}
-                          animate={{ opacity: 1, scale: 1, y: 0 }}
-                          exit={{ opacity: 0, scale: 0.95, y: -10 }}
-                          className="absolute right-0 mt-1 w-32 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-100 dark:border-slate-700 z-40 overflow-hidden"
-                        >
-                          <button
-                            onClick={(e) => { e.stopPropagation(); onSelectDetail?.(); setShowMenu(false); }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-[11px] font-black text-slate-900 dark:text-white hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-left"
-                          >
-                            <Eye size={14} className="text-blue-500" /> Details
-                          </button>
-                          {onEdit && (
+              <div className="absolute top-4 right-4 z-20">
+                <button 
+                  onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }}
+                  className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                >
+                  <MoreVertical size={16} />
+                </button>
+
+                <AnimatePresence>
+                  {showMenu && (
+                    <>
+                      <motion.div 
+                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                        onClick={(e) => { e.stopPropagation(); setShowMenu(false); }}
+                        className="fixed inset-0 z-30" 
+                      />
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                        className="absolute right-0 mt-1 w-32 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-100 dark:border-slate-700 z-40 overflow-hidden"
+                      >
+                        {enabled && (
+                          <>
                             <button
-                              onClick={(e) => { e.stopPropagation(); setShowMenu(false); onEdit(); }}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-[11px] font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-left border-t border-slate-50 dark:border-slate-700"
+                              onClick={(e) => { e.stopPropagation(); onSelectDetail?.(); setShowMenu(false); }}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-[11px] font-black text-slate-900 dark:text-white hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-left"
                             >
-                              <Edit2 size={14} /> Edit
+                              <Eye size={14} className="text-blue-500" /> Details
                             </button>
-                          )}
-                        </motion.div>
-                      </>
-                    )}
-                  </AnimatePresence>
-                </div>
-              )}
+                            {onEdit && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setShowMenu(false); onEdit(); }}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-[11px] font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-left border-t border-slate-50 dark:border-slate-700"
+                              >
+                                <Edit2 size={14} /> Edit
+                              </button>
+                            )}
+                            {onDelete && isLayer3 && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setShowMenu(false); setShowDeleteConfirmation(true); }}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-[11px] font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors text-left border-t border-slate-50 dark:border-slate-700"
+                              >
+                                <Trash2 size={14} /> Remove
+                              </button>
+                            )}
+                            {onToggleEnabled && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setShowMenu(false); onToggleEnabled(); }}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-[11px] font-bold text-slate-900 dark:text-white hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-left border-t border-slate-50 dark:border-slate-700"
+                              >
+                                <EyeOff size={14} /> Disable
+                              </button>
+                            )}
+                          </>
+                        )}
+                        {!enabled && onToggleEnabled && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setShowMenu(false); onToggleEnabled(); }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-[11px] font-bold text-slate-900 dark:text-white hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-left border-t border-slate-50 dark:border-slate-700"
+                          >
+                            <Eye size={14} /> Enable
+                          </button>
+                        )}
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
             
             <div className="flex justify-between items-center min-h-[14px]">
@@ -314,8 +350,15 @@ export function MetricCard({
       </motion.div>
       <div key={`modal-wrapper-${id}`}>
         <AdviceModal isOpen={showAdviceModal} onClose={() => setShowAdviceModal(false)}>
-          <p className="text-sm text-slate-600 dark:text-slate-300 whitespace-pre-line leading-relaxed">{calculatedAdvice}</p>
+          {calculatedAdvice}
         </AdviceModal>
+        <ConfirmationModal 
+          isOpen={showDeleteConfirmation} 
+          onClose={() => setShowDeleteConfirmation(false)}
+          onConfirm={() => { onDelete?.(); setShowDeleteConfirmation(false); }}
+          title="Remove Metric"
+          message={`Are you sure you want to remove this metric? ${currentLevel >= 2 ? 'The removal is irreversible and all data will be removed from the database. ' : ''}Note that removing the metric would impact the value of the parent metric.`}
+        />
       </div>
     </div>
   );
