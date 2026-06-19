@@ -1,13 +1,16 @@
 import { useState, useEffect, useMemo } from 'react';
-import { MetricHierarchy, AuditLogEntry, RAGStatus } from '../types';
-import { fetchMetricConfig, ConfigMetric, calculateStatus } from '../services/metricService';
+import { MetricHierarchy } from '../types';
+import { fetchMetricConfig, calculateStatus } from '../services/metricService';
+import { fetchHierarchyFromFirestore, saveHierarchyToFirestore } from '../services/dbPersistence';
+import { db } from '../firebase';
+import { doc, onSnapshot } from 'firebase/firestore';
 
 export function useMetrics(orgId: string | null) {
   const [hierarchies, setHierarchies] = useState<Record<string, MetricHierarchy[]>>({});
   const [loading, setLoading] = useState(true);
 
   const hydrateMetric = (m: any, isL1 = true): MetricHierarchy => {
-    // ... same as before
+    // ... [kept hydrateMetric same]
     const target = m.target || 100;
     const val = m.value !== undefined ? m.value : Math.random() * target * 1.1;
     const thresholds = m.thresholds || { 
@@ -74,10 +77,12 @@ export function useMetrics(orgId: string | null) {
       target: target,
       thresholds: thresholds,
       status: calculateStatus(finalValue, thresholds),
-      trend: Math.floor(Math.random() * 3) - 1, // -1, 0, 1
+      trend: Math.floor(Math.random() * 3) - 1,
       lastUpdated: m.lastUpdated || (Date.now() - Math.floor(Math.random() * 1000000)),
       children: hydratedChildren,
-      history: [Number(finalValue.toFixed(target > 100 ? 0 : 2))],
+      history: (hydratedChildren.length === 0) 
+        ? Array.from({ length: 12 }, () => Number((Math.random() * target).toFixed(2)))
+        : [Number(finalValue.toFixed(target > 100 ? 0 : 2))],
       notes: [
         { content: `Initial baseline stabilization completed. Primary factors: operational Efficiency and resource allocation.`, date: "2026-04-15" },
         { content: `Quarterly review: performance showing positive trend due to implementation of new monitoring cluster.`, date: "2026-04-28" },
@@ -95,12 +100,15 @@ export function useMetrics(orgId: string | null) {
     setHierarchies(prev => {
       const current = prev[orgId] || [];
       const updated = typeof newVal === 'function' ? newVal(current) : newVal;
+      saveHierarchyToFirestore(orgId, updated).catch(console.error);
       return { ...prev, [orgId]: updated };
     });
   };
 
   const refreshData = async () => {
     if (!orgId) return;
+    
+    let updatedHierarchy: MetricHierarchy[] | null = null;
     setHierarchies(prev => {
       const targetOrgHierarchy = prev[orgId];
       if (!targetOrgHierarchy) return prev;
@@ -129,36 +137,52 @@ export function useMetrics(orgId: string | null) {
           updatedNode.status = calculateStatus(updatedNode.value, m.thresholds);
           updatedNode.lastUpdated = Date.now();
           
-          const newHistory = [...(m.history || []), updatedNode.value].slice(-50);
+          let newHistory = [...(m.history || []), updatedNode.value];
+          // If it's a leaf node, enforce 12 points
+          if (!updatedNode.children || updatedNode.children.length === 0) {
+            newHistory = newHistory.slice(-12);
+          } else {
+            newHistory = newHistory.slice(-50);
+          }
           updatedNode.history = newHistory;
           
           return updatedNode;
         });
       };
-
-      return { ...prev, [orgId]: updateAndAggregate(targetOrgHierarchy) };
+      
+      updatedHierarchy = updateAndAggregate(targetOrgHierarchy);
+      return { ...prev, [orgId]: updatedHierarchy };
     });
+    
+    if (updatedHierarchy) {
+        await saveHierarchyToFirestore(orgId, updatedHierarchy);
+    }
   };
 
   useEffect(() => {
-    async function load() {
-      if (!orgId || hierarchies[orgId]) {
-        if (!orgId) setLoading(false);
-        return;
-      }
-      
-      setLoading(true);
-      try {
+    if (!orgId) {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    const docRef = doc(db, 'metrics', orgId);
+    
+    const unsubscribe = onSnapshot(docRef, async (docSnap) => {
+      if (docSnap.exists()) {
+        setHierarchies(prev => ({ ...prev, [orgId]: docSnap.data().hierarchy }));
+      } else {
         const config = await fetchMetricConfig();
         const hydrated = config.map(l1 => hydrateMetric(l1));
-        setHierarchies(prev => ({ ...prev, [orgId]: hydrated }));
-      } catch (err) {
-        console.error("Failed to load metrics", err);
-      } finally {
-        setLoading(false);
+        await saveHierarchyToFirestore(orgId, hydrated);
       }
-    }
-    load();
+      setLoading(false);
+    }, (err) => {
+        console.error("Failed to load metrics", err);
+        setLoading(false);
+    });
+
+    return () => unsubscribe();
   }, [orgId]);
 
   return { hierarchy, setHierarchy, loading, refreshData };

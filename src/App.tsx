@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect, Fragment } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { db } from './firebase';
-import { collection, getDocs, setDoc, doc } from 'firebase/firestore';
+import { collection, onSnapshot, getDoc, setDoc, doc, deleteDoc } from 'firebase/firestore';
+import { saveHierarchyToFirestore } from './services/dbPersistence';
 import { 
   ChevronRight, 
   ChevronDown,
@@ -357,36 +358,21 @@ export default function App() {
   const [organizations, setOrganizations] = useState<Organization[]>([]);
 
   useEffect(() => {
-    const initialOrganizations: Organization[] = [
-      { id: 'eca-be', title: 'EC&A BE', icon: 'Activity', description: 'Belgium Operations & Regional Cockpit', isActive: true, type: 'Area', teamCode: 'T00001', owner: 'John Doe' },
-      { id: 'eca-fr', title: 'Customer & Data', icon: 'Globe', description: 'Customer & Data BE', isActive: true, type: 'Area', teamCode: 'T00002', owner: 'John Doe' },
-      { id: 'eca-uk', title: 'Webb Squad', icon: 'Shield', description: 'Automation & Monitoring', isActive: true, type: 'Area', teamCode: 'T00003', owner: 'John Doe' },
-      { id: 'eca-global', title: 'EC&A GLOBAL', icon: 'Layers', description: 'Global Consolidation Dashboard', isActive: true, type: 'Community', teamCode: 'T99999', owner: 'John Doe' }
-    ];
-
-    const fetchOrganizations = async () => {
-      const orgsCol = collection(db, 'organizations');
-      const orgsSnapshot = await getDocs(orgsCol);
-      if (orgsSnapshot.empty) {
-        // Seed with initial values if empty
-        for (const org of initialOrganizations) {
-          await setDoc(doc(db, 'organizations', org.id), org);
-        }
-        setOrganizations(initialOrganizations);
-      } else {
-        const orgsList = orgsSnapshot.docs.map(doc => doc.data() as Organization);
-        
-        // CHECK FOR DUPLICATES
-        const ids = orgsList.map(o => o.id);
-        const uniqueIds = new Set(ids);
-        if (ids.length !== uniqueIds.size) {
-          console.error("DUPLICATE ORGANIZATION IDs FOUND:", ids.filter((id, i) => ids.indexOf(id) !== i));
-        }
-        
-        setOrganizations(orgsList);
+    const orgsCol = collection(db, 'organizations');
+    const unsubscribe = onSnapshot(orgsCol, (snapshot) => {
+      const orgsList = snapshot.docs.map(doc => doc.data() as Organization);
+      
+      // CHECK FOR DUPLICATES
+      const ids = orgsList.map(o => o.id);
+      const uniqueIds = new Set(ids);
+      if (ids.length !== uniqueIds.size) {
+        console.error("DUPLICATE ORGANIZATION IDs FOUND:", ids.filter((id, i) => ids.indexOf(id) !== i));
       }
-    };
-    fetchOrganizations();
+      
+      setOrganizations(orgsList);
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const [isAddOrgModalOpen, setIsAddOrgModalOpen] = useState(false);
@@ -468,27 +454,28 @@ export default function App() {
     addLog('ORG_SWITCH', `Switched to organization: ${org.title}`);
   };
 
-  const handleToggleOrgActive = (id: string) => {
+  const handleToggleOrgActive = async (id: string) => {
     const org = organizations.find(o => o.id === id);
     if (!org) return;
     
-    setOrganizations(prev => prev.map(o => 
-      o.id === id ? { ...o, isActive: !o.isActive } : o
-    ));
+    const updatedOrg = { ...org, isActive: !org.isActive };
+    await setDoc(doc(db, 'organizations', id), updatedOrg);
     
     addLog('ORG_TOGGLE', `Organization ${org.title} is now ${!org.isActive ? 'Active' : 'Deactivated'}`);
   };
 
-  const handleAddOrg = () => {
-    if (!newOrgData.title) return;
+  const handleAddOrg = async () => {
+    if (!newOrgData.title || !newOrgData.owner || !newOrgData.teamCode) return;
     const id = `org-${Date.now()}`;
-    setOrganizations(prev => [...prev, { 
+    const newOrg: Organization = { 
       ...newOrgData, 
       id, 
       isActive: true,
       type: newOrgData.type,
-      teamCode: newOrgData.teamCode || undefined
-    }]);
+      teamCode: newOrgData.teamCode
+    };
+    await setDoc(doc(db, 'organizations', id), newOrg);
+    
     setIsAddOrgModalOpen(false);
     setNewOrgData({ title: '', description: '', icon: 'Activity', type: 'Squad', teamCode: '', owner: '' });
     addLog('ORG_CREATE', `Created new organization: ${newOrgData.title} (${newOrgData.type})${newOrgData.teamCode ? ' [' + newOrgData.teamCode + ']' : ''}`);
@@ -508,8 +495,11 @@ export default function App() {
     setMenuOpenOrgId(null);
   };
 
-  const handleUpdateOrg = () => {
+  const handleUpdateOrg = async () => {
     if (!editingOrg || !editOrgData.title) return;
+    
+    const updatedOrg = { ...editingOrg, ...editOrgData };
+    await setDoc(doc(db, 'organizations', editingOrg.id), updatedOrg);
     
     // Detect changes for detailed logging
     const changes: string[] = [];
@@ -529,10 +519,6 @@ export default function App() {
         changes.push(`${label}: "${oldValue}" → "${newValue}"`);
       }
     });
-
-    setOrganizations(prev => prev.map(o => 
-      o.id === editingOrg.id ? { ...o, ...editOrgData } : o
-    ));
     
     // If current org is being edited, update cockpit title/description
     if (currentOrgId === editingOrg.id) {
@@ -554,10 +540,10 @@ export default function App() {
     addLog('ORG_UPDATE', detailMsg);
   };
 
-  const handleDeleteOrg = (id: string | null) => {
+  const handleDeleteOrg = async (id: string | null) => {
     if (!id) return;
     const org = organizations.find(o => o.id === id);
-    setOrganizations(prev => prev.filter(org => org.id !== id));
+    await deleteDoc(doc(db, 'organizations', id));
     setOrgToDelete(null);
     addLog('ORG_DELETE', `ADMIN: Irreversibly removed organization "${org?.title || id}" from the system.`);
   };
@@ -575,13 +561,26 @@ export default function App() {
 
   const OrgLogoIcon = availableIcons[orgIcon as keyof typeof availableIcons] || Activity;
 
-  // Initialize navigation stacks
+  // Keep navigation stacks synchronized with hierarchy changes
   useEffect(() => {
     if (hierarchy.length > 0) {
-      if (navigationStack.length === 0) setNavigationStack([hierarchy]);
-      if (configNavigationStack.length === 0) setConfigNavigationStack([hierarchy]);
+       const newStack: MetricHierarchy[][] = [hierarchy];
+       let currentChildren = hierarchy;
+       for (const node of selectedPath) {
+           const found = currentChildren.find(n => n.id === node.id);
+           if (found && found.children) {
+               newStack.push(found.children);
+               currentChildren = found.children;
+           } else {
+               break;
+           }
+       }
+       setNavigationStack(newStack);
+       if (configNavigationStack.length === 0) {
+           setConfigNavigationStack(newStack);
+       }
     }
-  }, [hierarchy, navigationStack.length, configNavigationStack.length]);
+  }, [hierarchy, selectedPath, configNavigationStack.length]);
 
   // Sync UI state when metric is selected for editing
   useEffect(() => {
@@ -941,6 +940,72 @@ export default function App() {
     setEditingMetric(null);
   };
 
+  const deleteMetricConfig = async (id: string) => {
+    console.log("Attempting to delete metric:", id);
+    // 1. Find title for logging
+    const findMetricTitle = (list: MetricHierarchy[]): string => {
+        for (const m of list) {
+            if (m.id === id) return m.title;
+            if (m.children) {
+                const found = findMetricTitle(m.children);
+                if (found) return found;
+            }
+        }
+        return "Unknown";
+    };
+
+    const title = findMetricTitle(hierarchy);
+    console.log("Metric title to delete:", title);
+
+    // 2. Recursive removal from hierarchy tree
+    const removeMetricLocal = (list: MetricHierarchy[]): MetricHierarchy[] => {
+      return list.filter(m => m.id !== id).map(m => {
+        const updatedM = { ...m };
+        if (updatedM.children) {
+          updatedM.children = removeMetricLocal(updatedM.children);
+        }
+        return updatedM;
+      });
+    };
+
+    const newHierarchy = removeMetricLocal(hierarchy);
+    console.log("New hierarchy:", newHierarchy);
+
+    // 3. State update
+    setHierarchy(newHierarchy);
+
+    // 4. Save to Firestore
+    if (currentOrgId) {
+       await saveHierarchyToFirestore(currentOrgId, newHierarchy);
+       console.log("Saved to Firestore");
+    }
+    
+    // 5. Log
+    addLog('CONFIG_DELETE', `Removed metric: ${title}`);
+  };
+
+  const toggleMetricEnabled = async (id: string) => {
+    const toggleRecursive = (list: MetricHierarchy[]): MetricHierarchy[] => {
+      return list.map(m => {
+        if (m.id === id) {
+          return { ...m, enabled: m.enabled === undefined ? false : !m.enabled };
+        }
+        if (m.children) {
+          return { ...m, children: toggleRecursive(m.children) };
+        }
+        return m;
+      });
+    };
+
+    const newHierarchy = toggleRecursive(hierarchy);
+    setHierarchy(newHierarchy);
+    if (currentOrgId) {
+       await saveHierarchyToFirestore(currentOrgId, newHierarchy);
+       console.log("Saved to Firestore");
+    }
+  };
+
+
   const filteredOrganizations = useMemo(() => {
     return organizations.filter(org => {
       const matchesSearch = org.title.toLowerCase().includes(orgSearchQuery.toLowerCase()) || 
@@ -1040,7 +1105,10 @@ export default function App() {
 
                       <div className="space-y-4">
                         <div className="space-y-1.5">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1">Organization Title</label>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1 flex items-center justify-between">
+                            Organization Title
+                            <span className="text-[9px] text-rose-500 font-black lowercase tracking-tighter">mandatory</span>
+                          </label>
                           <input 
                             type="text" 
                             className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-slate-900 dark:text-white font-bold focus:ring-2 focus:ring-slate-900 dark:focus:ring-slate-500 outline-none transition-all text-sm"
@@ -1051,7 +1119,10 @@ export default function App() {
                         </div>
 
                         <div className="space-y-1.5">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1">Owner / Accountable</label>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1 flex items-center justify-between">
+                            Owner / Accountable
+                            <span className="text-[9px] text-rose-500 font-black lowercase tracking-tighter">mandatory</span>
+                          </label>
                           <input 
                             type="text" 
                             className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-slate-900 dark:text-white font-bold focus:ring-2 focus:ring-slate-900 dark:focus:ring-slate-500 outline-none transition-all text-sm"
@@ -1090,7 +1161,10 @@ export default function App() {
                           </div>
 
                           <div className="space-y-1.5">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1">Team Code</label>
+                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1 flex items-center justify-between">
+                              Team Code
+                              <span className="text-[9px] text-rose-500 font-black lowercase tracking-tighter">mandatory</span>
+                            </label>
                             <input 
                               type="text" 
                               className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-slate-900 dark:text-white font-bold focus:ring-2 focus:ring-slate-900 dark:focus:ring-slate-500 outline-none transition-all text-sm"
@@ -1139,7 +1213,7 @@ export default function App() {
                           Cancel
                         </button>
                         <button 
-                          disabled={!newOrgData.title}
+                          disabled={!newOrgData.title || !newOrgData.owner || !newOrgData.teamCode}
                           onClick={handleAddOrg}
                           className="flex-1 py-4 px-6 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 rounded-2xl text-sm font-bold shadow-xl shadow-slate-200 dark:shadow-none hover:bg-slate-800 dark:hover:bg-white transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 disabled:grayscale disabled:hover:translate-y-0"
                         >
@@ -1197,7 +1271,7 @@ export default function App() {
                     additionalInfo: formData.get('additionalInfo') as string,
                     accountablePerson: accountable,
                     deadline: formData.get('deadline') as string,
-                    enabled: formData.get('enabled') === 'on',
+                    enabled: editingMetric.enabled,
                     decimals: Number(formData.get('decimals')),
                     dataSource: formData.get('dataSource') as any,
                     manualValue: Number(formData.get('manualValue')),
@@ -1212,17 +1286,6 @@ export default function App() {
                   setIsEditMetricModalOpen(false);
                 }}>
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
-                      <div className="flex items-center gap-2">
-                        <div className={cn("h-2 w-2 rounded-full", editingMetric.enabled ? "bg-emerald-500 shadow-sm" : "bg-slate-300")} />
-                        <span className="text-[10px] font-bold text-slate-600 uppercase">Metric Status</span>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" name="enabled" defaultChecked={editingMetric.enabled} className="sr-only peer" />
-                        <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-slate-900"></div>
-                      </label>
-                    </div>
-
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Display Title</label>
                       <input name="title" defaultValue={editingMetric.title} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-slate-900 outline-none" required />
@@ -1251,19 +1314,21 @@ export default function App() {
                       />
                     </div>
 
-                    {/* Target Value - Only for Layer 1 and 2 */}
-                    {(selectedPath.length === 0 || selectedPath.length === 1) && (
-                      <div className="space-y-1.5 pt-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase px-1">Target Value</label>
-                        <input 
-                          type="number" 
-                          name="target" 
-                          step="any" 
-                          defaultValue={editingMetric.target || 1} 
-                          className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-slate-900 outline-none" 
-                        />
-                      </div>
-                    )}
+                    <div className="space-y-1.5 pt-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase px-1 flex items-center justify-between">
+                        Target Value (e.g. 99,99)
+                        <span className="text-[9px] text-rose-500 font-black lowercase tracking-tighter">mandatory, &gt;0</span>
+                      </label>
+                      <input 
+                        type="number" 
+                        name="target" 
+                        step="0.01" 
+                        min="0.01"
+                        required
+                        defaultValue={editingMetric.target} 
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-slate-900 outline-none" 
+                      />
+                    </div>
 
                     {/* Deadline - Only for Layer 3 */}
                     {selectedPath.length >= 2 && (
@@ -1576,7 +1641,10 @@ export default function App() {
 
                       <div className="space-y-4">
                         <div className="space-y-1.5">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1">Organization Title</label>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1 flex items-center justify-between">
+                            Organization Title
+                            <span className="text-[9px] text-rose-500 font-black lowercase tracking-tighter">mandatory</span>
+                          </label>
                           <input 
                             type="text" 
                             className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-slate-900 dark:text-white font-bold focus:ring-2 focus:ring-slate-900 dark:focus:ring-slate-500 outline-none transition-all text-sm"
@@ -1587,7 +1655,10 @@ export default function App() {
                         </div>
 
                         <div className="space-y-1.5">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1">Owner / Accountable</label>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1 flex items-center justify-between">
+                            Owner / Accountable
+                            <span className="text-[9px] text-rose-500 font-black lowercase tracking-tighter">mandatory</span>
+                          </label>
                           <input 
                             type="text" 
                             className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-slate-900 dark:text-white font-bold focus:ring-2 focus:ring-slate-900 dark:focus:ring-slate-500 outline-none transition-all text-sm"
@@ -1626,7 +1697,10 @@ export default function App() {
                           </div>
 
                           <div className="space-y-1.5">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1">Team Code</label>
+                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1 flex items-center justify-between">
+                              Team Code
+                              <span className="text-[9px] text-rose-500 font-black lowercase tracking-tighter">mandatory</span>
+                            </label>
                             <input 
                               type="text" 
                               className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-slate-900 dark:text-white font-bold focus:ring-2 focus:ring-slate-900 dark:focus:ring-slate-500 outline-none transition-all text-sm"
@@ -1675,7 +1749,7 @@ export default function App() {
                           Cancel
                         </button>
                         <button 
-                          disabled={!editOrgData.title}
+                          disabled={!editOrgData.title || !editOrgData.owner || !editOrgData.teamCode}
                           onClick={handleUpdateOrg}
                           className="flex-1 py-4 px-6 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 rounded-2xl text-sm font-bold shadow-xl shadow-slate-200 dark:shadow-none hover:bg-slate-800 dark:hover:bg-white transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 disabled:grayscale disabled:hover:translate-y-0"
                         >
@@ -2001,7 +2075,7 @@ export default function App() {
                                </Fragment>
                              ))}
                              <span className="ml-2 px-2 py-0.5 bg-slate-900 text-white text-[9px] rounded-md uppercase tracking-widest font-black">L{currentLevel}</span>
-                              {currentLevel >= 2 && (
+                              {true && (
                                 <button
                                   onClick={() => setShowDisabled(!showDisabled)}
                                   className={cn(
@@ -2020,6 +2094,18 @@ export default function App() {
                           <div className="flex items-center gap-2">
                             <span className="text-slate-300 dark:text-slate-600 font-medium lowercase">pulsING</span>
                             <span className="uppercase tracking-tighter dark:text-white">Cockpit Dashboard</span>
+                            <button
+                                  onClick={() => setShowDisabled(!showDisabled)}
+                                  className={cn(
+                                    "ml-4 flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
+                                    showDisabled 
+                                      ? "bg-slate-900 text-white shadow-lg"
+                                      : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                                  )}
+                                >
+                                  <Eye size={12} />
+                                  {showDisabled ? "Hide Disabled" : "Show Disabled"}
+                            </button>
                           </div>
                         )}
                       </h1>
@@ -2051,6 +2137,7 @@ export default function App() {
                         key={`metric-${metric.id}`} 
                         id={metric.id}
                         isLayer3={currentLevel === 3}
+                        currentLevel={currentLevel}
                         title={metric.title} 
                         value={formatMetricValue(metric.value, metric.unit, metric.decimals)} 
                         status={metric.status} 
@@ -2072,6 +2159,8 @@ export default function App() {
                           setSelectedDataSource(metric.dataSource || 'Manual'); 
                           setIsEditMetricModalOpen(true); 
                         }}
+                        onDelete={currentLevel === 3 ? () => deleteMetricConfig(metric.id) : undefined}
+                        onToggleEnabled={() => toggleMetricEnabled(metric.id)}
                         adviceText={t.apiAdvice}
                       />
                     ))}

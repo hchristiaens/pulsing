@@ -47,8 +47,8 @@
     - { id: l2_2_6, title: "Tax Efficiency", description: "Effective rate", target: 20, metrics: 30, value: 19.5 }
 
 - id: layer1_3
-  title: "People"
-  description: "Soft metrics on culture, retention and customer satisfaction"
+  title: "Customer Impact"
+  description: "Market sentiment and retention"
   target: 85
   weight: 0.15
   value: 78.2
@@ -59,8 +59,8 @@
     - { id: l2_3_3, title: "Acquisition Cost", description: "CAC average", target: 150, metrics: 30, value: 165.5, accountablePerson: "Tariq Aziz" }
 
 - id: layer1_4
-  title: "Strategic KPI"
-  description: "Strategic initiatives and innovation metrics"
+  title: "System Resilience"
+  description: "Technical debt and uptime"
   target: 99.99
   weight: 0.1
   value: 99.95
@@ -71,8 +71,8 @@
     - { id: l2_4_3, title: "Dev Velocity", description: "Merge frequency", target: 25, metrics: 30, value: 22.0 }
 
 - id: layer1_5
-  title: "Tactical KPI"
-  description: "Execution metrics on projects, R&D and market expansion"
+  title: "Growth Strategy"
+  description: "R&D and market expansion"
   target: 100
   weight: 0.05
   value: 85.0
@@ -84,7 +84,7 @@
 
 - id: layer1_6
   title: "Compliance Risk"
-  description: "Regulatory and compliancy standing"
+  description: "ESG and regulatory standing"
   target: 100
   weight: 0.05
   value: 98.0
