@@ -1,34 +1,28 @@
-# -------- Build frontend --------
-FROM node:20 AS frontend-build
+# -------- Build app --------
+FROM node:20 AS build
 
-WORKDIR /app/frontend
-COPY frontend/package*.json ./
-RUN npm install
-COPY frontend .
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
 RUN npm run build
 
 
-# -------- Backend runtime --------
+# -------- Runtime --------
 FROM node:20-slim
 
 WORKDIR /app
 
-# install backend deps
-COPY backend/package*.json ./backend/
-RUN cd backend && npm install --production
+ENV NODE_ENV=production
+ENV PORT=3000
 
-# copy backend source
-COPY backend ./backend
+COPY package*.json ./
+RUN npm ci --omit=dev
 
-# copy frontend build output
-COPY --from=frontend-build /app/frontend/dist ./frontend
+COPY --from=build /app/dist ./dist
 
-# install tiny static server dependency (optional but clean)
-RUN npm install express
+EXPOSE 3000
 
-ENV PORT=8080
-
-EXPOSE 8080
-
-# run backend (which also serves frontend)
-CMD ["node", "backend/server.js"]
+CMD ["node", "dist/server.cjs"]
