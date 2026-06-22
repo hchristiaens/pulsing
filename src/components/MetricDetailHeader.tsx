@@ -371,7 +371,7 @@ export function MetricDetailHeader({ metric, onClose, onUpdateMetric, addLog, t 
                               return (
                                 <div className="bg-slate-900 dark:bg-slate-950 text-white p-3 rounded-2xl text-xs shadow-2xl border border-slate-700 dark:border-slate-800">
                                   <p className="font-black border-b border-slate-700 dark:border-slate-800 pb-1.5 mb-1.5 uppercase tracking-widest">{payload[0].payload.dateLabel}</p>
-                                  <p className={cn("font-bold text-lg", payload[0].payload.isPrediction ? "text-amber-400" : "text-blue-400")}>{payload[0].value.toFixed(metric.decimals || 0)}{metric.unit}</p>
+                                  <p className={cn("font-bold text-lg", payload[0].payload.isPrediction ? "text-amber-400" : "text-blue-400")}>{Number(payload[0].value).toFixed(metric.decimals || 0)}{metric.unit}</p>
                                 </div>
                               );
                             }

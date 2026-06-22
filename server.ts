@@ -2,6 +2,7 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
+import { buildAgentPrompt } from "./src/lib/promptUtils";
 import * as admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 
@@ -12,7 +13,7 @@ if (admin.getApps().length === 0) {
     projectId: 'gen-lang-client-0411603755'
   });
 } else {
-  firebaseApp = admin.apps[0];
+  firebaseApp = admin.getApps()[0];
 }
 const db = getFirestore(firebaseApp, 'ai-studio-b930bd34-004c-4f02-92da-92384623ad07');
 
@@ -84,13 +85,13 @@ async function startServer() {
       res.json({ advice: response?.text });
     } catch (error: any) {
       console.error("Error fetching metric advice:", error);
-      res.status(500).json({ error: error.message || "Failed to fetch AI advice" });
+      res.status(500).json({ error: (error instanceof Error ? error.message : String(error)) || "Failed to fetch AI advice" });
     }
   });
 
   app.post("/api/analyze-metric", async (req, res) => {
     console.log("Analyze metric request received:", req.body);
-    const { metricName, history, thresholds, notes, description } = req.body;
+    const { metricName, history, thresholds, notes, description, customPrompt } = req.body;
     let retries = 5;
     let response;
     
@@ -98,12 +99,7 @@ async function startServer() {
       try {
         response = await ai.models.generateContent({
           model: "gemini-3.1-flash-lite",
-          contents: `Analyze the performance of this metric: ${metricName}. 
-          Description: ${description}
-          History (last 12): ${history?.slice(-12).join(',')}
-          Thresholds: ${JSON.stringify(thresholds)}
-          Notes: ${JSON.stringify(notes)}
-          Summarize the trend and provide actionable advice to improve.`,
+          contents: customPrompt || buildAgentPrompt(metricName, description, notes, thresholds, history),
           config: {
             systemInstruction: "You are a team of expert data analysts. Collaborate to provide a comprehensive, actionable, and data-driven analysis of the following metric based on the provided history, thresholds, and notes.",
           },
@@ -126,7 +122,7 @@ async function startServer() {
           await new Promise(resolve => setTimeout(resolve, delay));
           continue;
         }
-        res.status(500).json({ error: error.message || "Failed to analyze metric" });
+        res.status(500).json({ error: (error instanceof Error ? error.message : String(error)) || "Failed to analyze metric" });
         return;
       }
     }

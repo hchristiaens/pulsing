@@ -5,6 +5,7 @@ import { AdviceModal } from './AdviceModal';
 import { ConfirmationModal } from './ConfirmationModal';
 import { calculateLinearRegression } from '../services/metricService';
 import { analyzeMetric } from '../services/analysisService';
+import { buildAgentPrompt } from '../lib/promptUtils';
 import { 
   ArrowUpRight, 
   ArrowDownRight, 
@@ -80,15 +81,35 @@ export function MetricCard({
   const [loadingAi, setLoadingAi] = useState(false);
   const [showAdviceModal, setShowAdviceModal] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [editablePrompt, setEditablePrompt] = useState<string>("");
+
+  const agentPrompt = useMemo(() => buildAgentPrompt(title, description, notes, thresholds, history), [title, description, notes, thresholds, history]);
+
+  const analyze = async (prompt?: string) => {
+    console.log("Analyze called with prompt:", prompt);
+    if (loadingAi) {
+        console.log("Already loading, aborting");
+        return;
+    }
+    setLoadingAi(true);
+    setAiAdvice("Analyzing....");
+    try {
+        console.log("Calling analyzeMetric with prompt:", prompt || agentPrompt);
+        const advice = await analyzeMetric(title, history, thresholds || { red: 0.7, amber: 0.85 }, notes, description, prompt || agentPrompt);
+        console.log("Analysis result:", advice);
+        setAiAdvice(advice);
+        if (!prompt) setEditablePrompt(agentPrompt);
+        else setEditablePrompt(prompt);
+    } catch (error) {
+        console.error("Analysis error:", error);
+    } finally {
+        setLoadingAi(false);
+    }
+  };
 
   useEffect(() => {
-    if (isLayer3 && enabled && thresholds) {
-        setLoadingAi(true);
-        analyzeMetric(title, history, thresholds, notes, description)
-            .then(setAiAdvice)
-            .finally(() => setLoadingAi(false));
-    }
-  }, [isLayer3, enabled, title, JSON.stringify(history), JSON.stringify(thresholds), JSON.stringify(notes), description]);
+    setEditablePrompt(agentPrompt);
+  }, [agentPrompt]);
 
   const regression = useMemo(() => calculateLinearRegression(history), [history]);
   const predictions = useMemo(() => [
@@ -97,12 +118,44 @@ export function MetricCard({
     { value: regression.intercept + regression.slope * (history.length + 2), isPrediction: true }
   ], [regression, history.length]);
 
-  const calculatedAdvice = useMemo(() => {
-    if (aiAdvice) return aiAdvice;
-    if (loadingAi) return "Analyzing with AI...";
-    const trend = regression.slope > 0 ? "improving" : regression.slope < 0 ? "declining" : "stable";
-    return `Projected trend is ${trend}. Expected value in 3 periods: ${predictions[2].value.toFixed(2)}${unit}`;
-  }, [regression, predictions, unit, aiAdvice, loadingAi]);
+  const formattedAdvice = useMemo(() => {
+    let markdown = `## ${title} - Analysis\n\n`;
+    markdown += `### Context\n${description}\n\n`;
+    
+    if (notes && notes.length > 0) {
+      markdown += `### Notes\n`;
+      notes.forEach(note => {
+        markdown += `- **${new Date(note.date).toLocaleDateString()}**: ${note.content}\n`;
+      });
+      markdown += `\n`;
+    }
+    
+    markdown += `### Last 12 Datapoints\n`;
+    const last12 = history.slice(-12);
+    markdown += `| Datapoint | Value |\n| --- | --- |\n`;
+    last12.forEach((val, idx) => {
+        markdown += `| ${idx + 1} | ${val}${unit} |\n`;
+    });
+    markdown += `\n`;
+    
+    markdown += `### AI Advice\n`;
+    if (aiAdvice) markdown += `${aiAdvice}`;
+    else if (loadingAi) markdown += "Analyzing with AI...";
+    else {
+        const trend = regression.slope > 0 ? "improving" : regression.slope < 0 ? "declining" : "stable";
+        markdown += `Projected trend is ${trend}. Expected value in 3 periods: ${predictions[2].value.toFixed(2)}${unit}`;
+    }
+    
+    return markdown;
+  }, [title, description, notes, history, aiAdvice, loadingAi, regression, predictions, unit]);
+
+  const rawData = useMemo(() => ({
+    title,
+    description,
+    notes,
+    thresholds,
+    history
+  }), [title, description, notes, thresholds, history]);
 
   const chartData = useMemo(() => [
     ...(history.slice(-12).map((val, idx) => ({
@@ -334,7 +387,7 @@ export function MetricCard({
             </p>
             <div className="mt-2 pt-2 border-t border-slate-50 dark:border-slate-800">
               <button
-                onClick={(e) => { e.stopPropagation(); setShowAdviceModal(true); }}
+                onClick={(e) => { e.stopPropagation(); analyze(); setShowAdviceModal(true); }}
                 className="inline-flex items-center px-2 py-1 text-[10px] font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition-all uppercase tracking-widest"
               >
                 AI Advice
@@ -349,9 +402,19 @@ export function MetricCard({
         )} />
       </motion.div>
       <div key={`modal-wrapper-${id}`}>
-        <AdviceModal isOpen={showAdviceModal} onClose={() => setShowAdviceModal(false)}>
-          {calculatedAdvice}
-        </AdviceModal>
+        <AdviceModal 
+          isOpen={showAdviceModal} 
+          onClose={() => setShowAdviceModal(false)}
+          metricName={title}
+          aiAdvice={aiAdvice || "Analyzing..."}
+          rawData={rawData}
+          prompt={editablePrompt}
+          onUpdatePrompt={(newPrompt) => { 
+            console.log("MetricCard: onUpdatePrompt received:", newPrompt);
+            setEditablePrompt(newPrompt); 
+            analyze(newPrompt); 
+          }}
+        />
         <ConfirmationModal 
           isOpen={showDeleteConfirmation} 
           onClose={() => setShowDeleteConfirmation(false)}
